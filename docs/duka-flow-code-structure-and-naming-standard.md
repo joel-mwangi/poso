@@ -17,11 +17,11 @@ This standard exists to keep the codebase:
 - aligned with the domain model;
 - independent of provider-specific details where possible.
 
-The repository already has the beginnings of this separation with `src/application`, `src/domain`, and `src/infrastructure`, while the current top-level `src/App.tsx` remains large and is transitional. The current structure should be treated as a baseline to refactor toward this standard, not as the final arrangement.
+The repository uses a modular monolith architecture. The code structure standards define the target design to initialize and scale the codebase predictably.
 
 ## 2. Current technical baseline
 
-The repository currently uses:
+The repository technical stack is:
 
 - React;
 - TypeScript;
@@ -31,13 +31,14 @@ The repository currently uses:
 - Dexie / IndexedDB for local persistence;
 - Zod;
 - Vitest;
-- ESLint.
+- ESLint;
+- Tailwind CSS.
 
 The target architecture keeps these technologies unless a separate architecture decision explicitly replaces one.
 
 ## 3. High-level repository structure
 
-The preferred repository structure is:
+The repository structure follows the **modular monolith** standard defined in `docs/duka-flow-modular-code-architecture-standard.md`:
 
 ```text
 /
@@ -45,12 +46,50 @@ The preferred repository structure is:
 ├── public/
 ├── src/
 │   ├── app/
-│   ├── application/
-│   ├── domain/
-│   ├── infrastructure/
-│   ├── presentation/
+│   │   ├── bootstrap/
+│   │   ├── config/
+│   │   ├── providers/
+│   │   ├── routes/
+│   │   └── app.tsx
+│   │
+│   ├── modules/
+│   │   ├── auth/
+│   │   ├── organizations/
+│   │   ├── shops/
+│   │   ├── staff/
+│   │   ├── catalog/
+│   │   ├── inventory/
+│   │   ├── sales/
+│   │   ├── payments/
+│   │   ├── customers/
+│   │   ├── deni/
+│   │   ├── purchasing/
+│   │   ├── suppliers/
+│   │   ├── cash/
+│   │   ├── reconciliation/
+│   │   ├── subscriptions/
+│   │   ├── sync/
+│   │   ├── audit/
+│   │   ├── notifications/
+│   │   └── insights/
+│   │
+│   ├── platform/
+│   │   ├── database/
+│   │   ├── auth/
+│   │   ├── secrets/
+│   │   ├── telemetry/
+│   │   └── runtime/
+│   │
 │   ├── shared/
-│   └── main.tsx
+│   │   ├── ui/
+│   │   ├── errors/
+│   │   ├── formatting/
+│   │   ├── validation/
+│   │   └── time/
+│   │
+│   ├── main.tsx
+│   └── styles/
+│       └── globals.css
 ├── supabase/
 │   ├── migrations/
 │   ├── functions/
@@ -75,113 +114,47 @@ Application composition and bootstrapping.
 Use for:
 
 - application providers;
-- routing;
-- dependency wiring;
+- top-level router;
+- dependency wiring and bootstrap;
 - environment loading;
 - global application configuration;
 - top-level error boundaries;
 - application initialization.
 
-Do not put domain rules here.
+Do not put business domain rules here.
 
-### `src/application/`
+### `src/modules/<capability>/`
 
-Use-case orchestration.
+Business capabilities organized as independent modules. Each capability owns its own layers:
 
-This layer answers:
+- **`domain/`**: Pure business rules, entities, value objects, invariants, calculations, and domain events. Independent of React, Supabase, Dexie, or browser APIs.
+- **`application/`**: Use-case orchestration answering: *What operation is the user or system trying to perform?* Coordinates domain rules and repository ports.
+- **`infrastructure/`**: Concrete implementations of repositories (Dexie local outbox/tables, Supabase Postgres/RLS), external adapters, and device drivers.
+- **`presentation/`**: React components, pages, forms, hooks, and view models specific to this capability.
 
-> **What operation is the user/system trying to perform?**
+A capability exposes public exports via its module entry point `src/modules/<capability>/index.ts`.
 
-Examples:
+### `src/platform/`
 
-```text
-application/
-├── auth/
-├── catalog/
-├── sales/
-├── payments/
-├── inventory/
-├── customers/
-├── deni/
-├── purchasing/
-├── reconciliation/
-├── staff/
-├── shops/
-└── sync/
-```
+Foundation services that support all modules:
 
-A use case coordinates domain rules and ports. It should not know how PostgreSQL, Dexie, or a specific payment provider works.
-
-### `src/domain/`
-
-Core business truth and rules.
-
-Use for:
-
-- entities;
-- value objects;
-- domain types;
-- domain invariants;
-- domain services;
-- domain events;
-- pure calculations;
-- business policies that must hold regardless of UI or infrastructure.
-
-The domain must not import React, Supabase, Dexie, browser APIs, or provider SDKs.
-
-### `src/infrastructure/`
-
-Implementations of external or technical concerns.
-
-Preferred structure:
-
-```text
-infrastructure/
-├── local/
-│   ├── dexie/
-│   ├── repositories/
-│   └── outbox/
-├── supabase/
-│   ├── client/
-│   ├── repositories/
-│   ├── auth/
-│   └── functions/
-├── integrations/
-│   ├── mpesa/
-│   ├── bank/
-│   ├── card/
-│   ├── sms/
-│   └── whatsapp/
-├── device/
-├── printing/
-└── telemetry/
-```
-
-Infrastructure owns provider-specific implementation details.
-
-For the current MVP, M-Pesa is a **recorded payment method**, not a live integration. The `mpesa` integration adapter should only be introduced when live integration is actually approved and implemented.
-
-### `src/presentation/`
-
-User-facing React code.
-
-Preferred structure:
-
-```text
-presentation/
-├── routes/
-├── layouts/
-├── pages/
-├── features/
-├── components/
-└── hooks/
-```
-
-Presentation code may call application use cases through approved interfaces, but it must not directly implement database writes, payment-provider calls, or business invariants.
+- database clients (Supabase client factory, Dexie core engine);
+- auth session provider;
+- secrets boundary (safeguarding server-only keys and credentials);
+- telemetry, logging, and metrics;
+- runtime environment helpers.
 
 ### `src/shared/`
 
-Small cross-cutting utilities that genuinely have no business ownership.
+Generic, cross-cutting technical utilities that have no specific business domain:
+
+- primitive UI components (buttons, modals, inputs, badges);
+- error types and error formatting;
+- money and date/time formatters;
+- generic validation helpers;
+- result types (`Result<T, E>`).
+
+Do not turn `shared/` into a dumping ground. If code belongs to a domain, keep it in that module.
 
 Examples:
 
@@ -227,44 +200,45 @@ Singular/plural rule:
 
 ## 6. Recommended internal module structure
 
-A mature domain may use:
+Inside each capability module (`src/modules/<capability>/`), organize code across the four layers:
 
 ```text
-src/application/sales/
-├── complete-sale.ts
-├── calculate-sale-total.ts
-├── return-sale.ts
-├── refund-sale.ts
-└── ports.ts
-
-src/domain/sales/
-├── sale.ts
-├── sale-item.ts
-├── sale-status.ts
-├── settlement.ts
-├── sales-policy.ts
-└── index.ts
-
-src/infrastructure/local/repositories/
-├── local-sale-repository.ts
-└── local-payment-repository.ts
-
-src/infrastructure/supabase/repositories/
-├── supabase-sale-repository.ts
-└── supabase-payment-repository.ts
-
-src/presentation/features/sales/
-├── components/
-├── hooks/
-├── pages/
-└── view-models/
+src/modules/sales/
+├── domain/
+│   ├── sale.ts
+│   ├── sale-item.ts
+│   ├── sale-status.ts
+│   ├── settlement.ts
+│   ├── sales-policy.ts
+│   └── index.ts
+├── application/
+│   ├── complete-sale.ts
+│   ├── calculate-sale-total.ts
+│   ├── return-sale.ts
+│   ├── refund-sale.ts
+│   └── ports.ts
+├── infrastructure/
+│   ├── local-sale-repository.ts
+│   ├── supabase-sale-repository.ts
+│   └── sale-mappers.ts
+├── presentation/
+│   ├── components/
+│   │   ├── cart.tsx
+│   │   ├── sale-summary.tsx
+│   │   └── payment-picker.tsx
+│   ├── hooks/
+│   │   └── use-sale-cart.ts
+│   ├── pages/
+│   │   └── checkout-page.tsx
+│   └── view-models/
+└── index.ts                  # Public module exports
 ```
 
-Do not create every folder automatically. Create the structure as the domain grows.
+Do not create every folder automatically. Create the structure as the capability grows.
 
 ## 7. Import direction
 
-The allowed dependency direction is:
+The allowed dependency direction inside each module and across modules is:
 
 ```text
 Presentation
@@ -285,6 +259,10 @@ application → domain
 application → ports/interfaces
 infrastructure → application/domain
 shared → no domain-specific layer
+module A → module B public API (src/modules/B/index.ts) only
+```
+
+Cross-module imports MUST only occur through the module's public `index.ts` boundary. Module A must not deep-import private files from Module B (e.g., `import { ... } from '@/modules/inventory/infrastructure/local-table'`).
 ```
 
 The following are prohibited:
@@ -759,10 +737,8 @@ Preferred:
 
 ```text
 @/app/...
-@/application/...
-@/domain/...
-@/infrastructure/...
-@/presentation/...
+@/modules/<capability>/...
+@/platform/...
 @/shared/...
 ```
 
@@ -772,7 +748,7 @@ Avoid long chains of relative imports such as:
 ../../../../../../domain/...
 ```
 
-Do not introduce multiple competing alias styles.
+Do not introduce multiple competing alias styles. Cross-module imports should always import from the capability root (e.g. `@/modules/inventory`).
 
 ## 22. Naming abbreviations
 
@@ -870,12 +846,13 @@ The repository should converge toward:
 ```text
 src/
 ├── app/
-│   ├── providers/
-│   ├── router/
+│   ├── bootstrap/
 │   ├── config/
-│   └── bootstrap.ts
+│   ├── providers/
+│   ├── routes/
+│   └── app.tsx
 │
-├── application/
+├── modules/
 │   ├── auth/
 │   ├── organizations/
 │   ├── shops/
@@ -884,67 +861,38 @@ src/
 │   ├── inventory/
 │   ├── sales/
 │   ├── payments/
-│   ├── deni/
 │   ├── customers/
+│   ├── deni/
 │   ├── purchasing/
 │   ├── suppliers/
 │   ├── cash/
 │   ├── reconciliation/
 │   ├── subscriptions/
+│   ├── sync/
 │   ├── audit/
-│   └── sync/
+│   ├── notifications/
+│   └── insights/
 │
-├── domain/
-│   ├── organizations/
-│   ├── shops/
-│   ├── staff/
-│   ├── catalog/
-│   ├── inventory/
-│   ├── sales/
-│   ├── payments/
-│   ├── deni/
-│   ├── customers/
-│   ├── purchasing/
-│   ├── suppliers/
-│   ├── cash/
-│   ├── reconciliation/
-│   ├── subscriptions/
-│   └── shared/
+├── platform/
+│   ├── database/
+│   ├── auth/
+│   ├── secrets/
+│   ├── telemetry/
+│   └── runtime/
 │
-├── infrastructure/
-│   ├── local/
-│   │   ├── dexie/
-│   │   ├── repositories/
-│   │   ├── outbox/
-│   │   └── sync/
-│   ├── supabase/
-│   │   ├── auth/
-│   │   ├── repositories/
-│   │   └── clients/
-│   ├── integrations/
-│   │   ├── mpesa/
-│   │   ├── bank/
-│   │   ├── card/
-│   │   └── communications/
-│   ├── device/
-│   ├── printing/
-│   └── telemetry/
+├── shared/
+│   ├── ui/
+│   ├── errors/
+│   ├── formatting/
+│   ├── validation/
+│   └── time/
 │
-├── presentation/
-│   ├── routes/
-│   ├── layouts/
-│   ├── pages/
-│   ├── features/
-│   ├── components/
-│   └── hooks/
-│
-└── shared/
-    ├── formatting/
-    ├── validation/
-    ├── logging/
-    ├── result/
-    └── utilities/
+├── main.tsx
+└── styles/
+    └── globals.css
 ```
+
+Each capability module in `src/modules/<capability>/` follows the internal 4-layer structure (`domain/`, `application/`, `infrastructure/`, `presentation/`, and `index.ts`).
 
 ## 27. Non-negotiable rules
 

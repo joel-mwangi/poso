@@ -133,7 +133,7 @@ Sign in
 
 Offline cached shop access must remain a fallback, never the source of server authorization truth.
 
-## 5. Catalog foundation
+## 6. Catalog foundation
 
 Implement and verify:
 
@@ -148,7 +148,7 @@ Implement and verify:
 
 Product presentation stays inside `modules/catalog/presentation`.
 
-## 6. Inventory foundation
+## 7. Inventory foundation
 
 Implement before production sales enforcement:
 
@@ -161,7 +161,7 @@ Implement before production sales enforcement:
 
 Sales must consume the inventory contract rather than directly mutating product quantities.
 
-## 7. Sales foundation
+## 8. Sales foundation
 
 Implement the canonical sale flow:
 
@@ -178,7 +178,7 @@ Select products
 
 The sale use case remains business logic; presentation components only render and collect input.
 
-## 8. Payment foundation
+## 9. Payment foundation
 
 Implement payment methods independently of the POS UI:
 
@@ -201,7 +201,7 @@ The configuration scope is organization-level by default, with explicit per-shop
 
 Never expose provider secrets to staff unless the permission model explicitly allows a controlled administrative operation. Store secrets in the platform secrets boundary, not in UI state or normal merchant records.
 
-## 9. Customer and Deni foundation
+## 10. Customer and Deni foundation
 
 Implement:
 
@@ -215,7 +215,7 @@ Implement:
 
 Deni must remain an accounting/business capability, not merely a payment button.
 
-## 10. Offline and synchronization
+## 11. Offline and synchronization
 
 After the authoritative online flows are stable:
 
@@ -230,7 +230,7 @@ After the authoritative online flows are stable:
 
 Offline UI must never bypass server authorization rules.
 
-## 11. Receipts and operational records
+## 12. Receipts and operational records
 
 Implement:
 
@@ -241,7 +241,7 @@ Implement:
 - payment references
 - reconciliation hooks
 
-## 12. Staff administration
+## 13. Staff administration
 
 After authorization is stable:
 
@@ -255,7 +255,7 @@ After authorization is stable:
 
 Role labels such as Cashier, Manager, or Inventory Operator may exist only as optional responsibility templates that map to explicit permissions.
 
-## 13. Platform administration UI
+## 14. Platform administration UI
 
 Implement after core merchant authorization is stable:
 
@@ -269,7 +269,7 @@ Implement after core merchant authorization is stable:
 
 Any support access into a merchant organization must be explicit, scoped, temporary where appropriate, and auditable.
 
-## 14. Hardening and verification
+## 15. Hardening and verification
 
 Before calling the foundation complete:
 

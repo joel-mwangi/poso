@@ -47,6 +47,21 @@ The target model is broader. It requires first-class handling of shop assignment
 
 ---
 
+## 3. MVP definition
+
+The DukaFlow MVP should let a real small Kenyan shop answer and act on four essential questions:
+
+1. **Who can use the shop and what are they allowed to do?**
+2. **What stock do we have?**
+3. **What did we sell and how was it settled?**
+4. **What money do we actually have or are we still owed?**
+
+Customer, purchasing, and business insights then make those foundations useful and scalable.
+
+The MVP should support a one-person shop first while keeping the data model capable of growing into staffed and multi-shop operation without a rewrite.
+
+---
+
 ## 4. Owner onboarding setup classification
 
 After account registration and verification, but before organization and first-shop bootstrap, the owner completes a short ticking checklist:
@@ -118,22 +133,9 @@ Desktop → step rail and wider work area
 
 Use one primary action per screen, a short step indicator, large touch targets, no horizontal scrolling, and **Set up later** for optional configuration. Advanced M-Pesa credentials, staff permissions, supplier controls, and reconciliation remain separate screens.
 
-## 5. MVP definition
-
-The DukaFlow MVP should let a real small Kenyan shop answer and act on four essential questions:
-
-1. **Who can use the shop and what are they allowed to do?**
-2. **What stock do we have?**
-3. **What did we sell and how was it settled?**
-4. **What money do we actually have or are we still owed?**
-
-Customer, purchasing, and business insights then make those foundations useful and scalable.
-
-The MVP should support a one-person shop first while keeping the data model capable of growing into staffed and multi-shop operation without a rewrite.
-
 ---
 
-## 4. Build order
+## 5. Build order and phases
 
 ```text
 Phase 0  Foundation / authorization
@@ -159,7 +161,7 @@ Each phase should leave the previous phase working. Avoid building later screens
 
 ---
 
-## 5. Phase 0 — Foundation
+## 6. Phase 0 — Foundation
 
 ### Goal
 
@@ -226,7 +228,7 @@ No business-domain feature proceeds unless its actor, organization, shop, and pe
 
 ---
 
-## 6. Phase 1 — Organization, Shop, Staff Access & Workspace
+## 7. Phase 1 — Organization, Shop, Staff Access & Workspace
 
 ### Goal
 
@@ -274,7 +276,7 @@ A user always lands in a context they are authorized to use and can understand w
 
 ---
 
-## 7. Phase 2 — Products & Inventory
+## 8. Phase 2 — Products & Inventory
 
 ### Goal
 
@@ -329,7 +331,7 @@ The owner can trust the stock number enough to make a reorder or selling decisio
 
 ---
 
-## 8. Phase 3 — Sales & Settlement
+## 9. Phase 3 — Sales & Settlement
 
 ### Goal
 
@@ -396,7 +398,7 @@ A shop can reliably sell goods and preserve the commercial truth of what happene
 
 ---
 
-## 9. Phase 4 — Cash, M-Pesa & Reconciliation
+## 10. Phase 4 — Cash, M-Pesa & Reconciliation
 
 ### Goal
 
@@ -455,7 +457,7 @@ Owner and authorized staff can reconcile recorded money against physical/confirm
 
 ---
 
-## 10. Phase 5 — Customers & Deni Lifecycle
+## 11. Phase 5 — Customers & Deni Lifecycle
 
 ### Goal
 
@@ -502,7 +504,7 @@ The owner can answer: **Who owes me, how much, and why?**
 
 ---
 
-## 11. Phase 6 — Purchasing & Suppliers
+## 12. Phase 6 — Purchasing & Suppliers
 
 ### Goal
 
@@ -556,7 +558,7 @@ The owner can answer: **Where did this stock come from, what did it cost, and wh
 
 ---
 
-## 12. Phase 7 — Insights & Growth
+## 13. Phase 7 — Insights & Growth
 
 ### Goal
 
@@ -606,7 +608,7 @@ The owner gets useful answers to **What is happening? Why? What needs attention?
 
 ---
 
-## 13. Phase 8 — Scale & Advanced Operations
+## 14. Phase 8 — Scale & Advanced Operations
 
 This phase follows the MVP and is only built when justified by real usage.
 
@@ -628,7 +630,7 @@ No Phase 8 capability should distort the simple one-shop experience.
 
 ---
 
-## 14. Cross-phase engineering rules
+## 15. Cross-phase engineering rules
 
 Every business mutation must have:
 
@@ -652,7 +654,7 @@ Every offline-capable mutation must additionally have:
 
 ---
 
-## 15. Definition of done for a phase
+## 16. Definition of done for a phase
 
 A phase is complete only when all applicable conditions are satisfied:
 
@@ -694,7 +696,7 @@ The capability is tested end-to-end from user action to persisted domain state a
 
 ---
 
-## 16. Required end-to-end acceptance journeys
+## 17. Required end-to-end acceptance journeys
 
 The implementation must eventually pass at least these realistic journeys.
 
@@ -846,7 +848,7 @@ No duplicate sale/stock/cash effect
 
 ---
 
-## 17. Explicit non-goals for the MVP
+## 18. Explicit non-goals for the MVP
 
 The MVP should not attempt to become:
 
@@ -863,7 +865,7 @@ The MVP wins by being extremely reliable at the core retail loop.
 
 ---
 
-## 18. Priority rule when trade-offs occur
+## 19. Priority rule when trade-offs occur
 
 When time or complexity forces a choice, prioritize in this order:
 
@@ -882,7 +884,7 @@ A beautiful feature that can corrupt stock or money is never higher priority tha
 
 ---
 
-## 19. Source-of-truth boundary
+## 20. Source-of-truth boundary
 
 This roadmap does not redefine business rules.
 
@@ -901,7 +903,7 @@ If the roadmap conflicts with a domain source-of-truth document, update the road
 
 ---
 
-## 20. Final product direction
+## 21. Final product direction
 
 The implementation path should ultimately produce this loop:
 

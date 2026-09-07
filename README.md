@@ -28,15 +28,11 @@ The detailed offline/online architecture is defined in [Offline-Online Capabilit
 
 ### Implementation status
 
-The first implementation foundation is now present in this repository. DukaFlow has an installable PWA shell, the approved visual system, a Dexie/IndexedDB local store, a durable local outbox, an offline-first sale flow for Cash, M-Pesa reference recording, and Deni, a stock reduction projection, synchronization states, and a browser-safe Supabase client boundary. The current sync service acknowledges operations locally as a development placeholder; the Supabase Edge Function ingestion contract and production server reconciliation still need to be implemented.
+This repository currently hosts the complete architecture, domain contracts, security rules, UX specifications, and implementation roadmaps for DukaFlow. The public PWA manifest and service worker shell assets are prepared. 
 
-To verify the application locally:
+The project follows the [Implementation Order](docs/implementation-order.md) and [MVP Implementation Roadmap](docs/duka-flow-mvp-and-implementation-roadmap.md) to initialize the modular monolith codebase (`src/app/`, `src/modules/`, `src/platform/`, `src/shared/`), establish Supabase database migrations with PostgreSQL RLS, configure Dexie/IndexedDB local stores, and implement the offline-first sales loop.
 
-```text
-npm install
-npm run build
-npm run dev
-```
+The complete documentation directory index is available in [Documentation Index](docs/README.md).
 
 ## General landing page
 
