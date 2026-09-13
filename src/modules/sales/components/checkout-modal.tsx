@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { localDb, LocalProduct, LocalCustomer, LocalSale, LocalPayment } from '@/platform/database/dexie-db';
+import { authService } from '@/modules/auth/auth-service';
 import { syncService } from '@/modules/sync/sync-service';
 import { formatKes, formatKesCompact, kesToCents } from '@/shared/formatting/money';
 import { X, Banknote, Smartphone, BookOpen, Check, AlertCircle, UserCheck } from 'lucide-react';
@@ -55,8 +56,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setMpesaReference('QK' + Math.random().toString(36).substring(2, 7).toUpperCase());
       setSplitCashKes((Math.floor(totalAmount / 200) * 100).toString());
       
-      // Load customers
-      localDb.customers.toArray().then((custs) => {
+      // Load customers partitioned by shop
+      const activeShop = authService.getActiveShop();
+      const query = activeShop?.id
+        ? localDb.customers.where('shopId').equals(activeShop.id)
+        : localDb.customers;
+      query.toArray().then((custs) => {
         setCustomers(custs);
         if (custs.length > 0) setSelectedCustomerId(custs[0].id);
       });
@@ -158,9 +163,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         });
 
         // Record Deni transaction
+        const activeShop = authService.getActiveShop();
+        const currentOrg = authService.getCurrentOrg();
+        const currentUser = authService.getCurrentUser();
+        const currentShopId = activeShop?.id || 'shop_main_01';
+        const currentOrgId = currentOrg?.id || 'org_duka_01';
+        const currentCashierId = currentUser?.id || 'cashier_joel';
+        const currentCashierName = currentUser?.name || 'Cashier';
+
         await localDb.deni_transactions.add({
           id: 'deni_tx_' + Date.now(),
-          shopId: 'shop_main_01',
+          shopId: currentShopId,
           customerId: selectedCustomer.id,
           customerName: selectedCustomer.name,
           saleId,
@@ -214,13 +227,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         }
       }
 
+      const activeShop = authService.getActiveShop();
+      const currentOrg = authService.getCurrentOrg();
+      const currentUser = authService.getCurrentUser();
+      const currentShopId = activeShop?.id || 'shop_main_01';
+      const currentOrgId = currentOrg?.id || 'org_duka_01';
+      const currentCashierId = currentUser?.id || 'cashier_joel';
+      const currentCashierName = currentUser?.name || 'Cashier';
+
       const completedSale: LocalSale = {
         id: saleId,
         localSaleId,
-        shopId: 'shop_main_01',
-        organizationId: 'org_duka_01',
-        cashierId: 'cashier_joel',
-        cashierName: 'Joel G.',
+        shopId: currentShopId,
+        organizationId: currentOrgId,
+        cashierId: currentCashierId,
+        cashierName: currentCashierName,
         customerId: method === 'deni' ? selectedCustomer?.id : undefined,
         customerName: method === 'deni' ? selectedCustomer?.name : undefined,
         subtotal: totalAmount,

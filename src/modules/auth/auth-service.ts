@@ -1,4 +1,11 @@
-import { localDb, LocalOrganization, LocalShop, LocalStaffInvitation, seedInitialLocalDataIfEmpty } from '@/platform/database/dexie-db';
+import {
+  localDb,
+  LocalOrganization,
+  LocalShop,
+  LocalStaffInvitation,
+  seedStarterCatalogForShop,
+  seedDemoDataForShop,
+} from '@/platform/database/dexie-db';
 import { AuthUser, HelperInput, NewShopInput, OwnerChecklistAnswers } from './auth-types';
 
 const STORAGE_KEY_USER = 'dukaflow_auth_user';
@@ -86,6 +93,16 @@ class AuthService {
     this.activeShopId = shopId;
     localStorage.setItem(STORAGE_KEY_ACTIVE_SHOP_ID, shopId);
     this.notify();
+  }
+
+  public async reloadShops(): Promise<void> {
+    if (this.currentUser?.organizationId) {
+      this.shops = await localDb.shops
+        .where('organizationId')
+        .equals(this.currentUser.organizationId)
+        .toArray();
+      this.notify();
+    }
   }
 
   // Register a new Owner account (does not have an organization yet, routes to Onboarding Checklist)
@@ -342,8 +359,11 @@ class AuthService {
       }
     }
 
-    // Seed default product catalog for this shop
-    await seedInitialLocalDataIfEmpty(primaryShopId);
+    // If owner opted to load Kenyan retail starter templates, seed them with 0 stock
+    if (params.answers.catalogChoice === 'kenyan_essentials') {
+      await seedStarterCatalogForShop(primaryShopId, 0);
+    }
+    // If 'empty', no products are pre-seeded; owner starts with clean, empty shelves.
 
     // Update state
     this.currentUser.organizationId = orgId;
@@ -424,7 +444,7 @@ class AuthService {
 
         await localDb.shops.put(shop1);
         await localDb.shops.put(shop2);
-        await seedInitialLocalDataIfEmpty(demoShopId);
+        await seedDemoDataForShop(demoShopId);
       }
 
       const user: AuthUser = {

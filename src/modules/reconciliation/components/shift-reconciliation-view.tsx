@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { localDb, LocalSale, LocalDeniTransaction } from '@/platform/database/dexie-db';
+import { authService } from '@/modules/auth/auth-service';
 import { formatKes, kesToCents, centsToKes } from '@/shared/formatting/money';
 import {
   Calculator,
@@ -38,10 +39,17 @@ export const ShiftReconciliationView: React.FC = () => {
   const [countedCashKes, setCountedCashKes] = useState('');
   const [shiftClosedMessage, setShiftClosedMessage] = useState<string | null>(null);
 
+  const activeShop = authService.getActiveShop();
+
   useEffect(() => {
-    localDb.sales.toArray().then(setSales);
-    localDb.deni_transactions.toArray().then(setDeniTransactions);
-  }, []);
+    if (activeShop?.id) {
+      localDb.sales.where('shopId').equals(activeShop.id).toArray().then(setSales);
+      localDb.deni_transactions.where('shopId').equals(activeShop.id).toArray().then(setDeniTransactions);
+    } else {
+      localDb.sales.toArray().then(setSales);
+      localDb.deni_transactions.toArray().then(setDeniTransactions);
+    }
+  }, [activeShop?.id]);
 
   // Compute metrics
   const openingFloatCents = kesToCents(parseFloat(openingFloatKes) || 0);
@@ -92,7 +100,32 @@ export const ShiftReconciliationView: React.FC = () => {
     setExpenseAmountKes('');
   };
 
-  const handleCloseShift = () => {
+  const handleCloseShift = async () => {
+    const currentUser = authService.getCurrentUser();
+    const currentShopId = activeShop?.id || 'shop_main_01';
+    const currentCashierId = currentUser?.id || 'cashier_joel';
+    const currentCashierName = currentUser?.name || 'Cashier';
+
+    await localDb.shifts.add({
+      id: 'shift_' + Date.now(),
+      shopId: currentShopId,
+      cashierId: currentCashierId,
+      cashierName: currentCashierName,
+      openedAt: new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
+      closedAt: new Date().toISOString(),
+      openingCash: openingFloatCents,
+      closingCash: countedCashCents,
+      expectedCash: expectedCashCents,
+      actualCash: countedCashCents,
+      cashSales: totalCashSalesCents,
+      mpesaSales: totalMpesaSalesCents,
+      deniGiven: totalDeniSalesCents,
+      deniRepaid: cashRepaidCents,
+      expenses: totalExpensesCents,
+      notes: `Variance: ${formatKes(varianceCents)}`,
+      status: 'closed',
+    });
+
     setShiftClosedMessage(
       `Shift closed successfully. Counted ${formatKes(countedCashCents)} (Variance: ${formatKes(varianceCents)}). Summary stored for audit.`
     );

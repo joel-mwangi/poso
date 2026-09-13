@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { localDb, LocalProduct } from '@/platform/database/dexie-db';
+import { authService } from '@/modules/auth/auth-service';
 import { syncService } from '@/modules/sync/sync-service';
 import { kesToCents } from '@/shared/formatting/money';
 import { X, PackagePlus, Barcode } from 'lucide-react';
@@ -71,9 +72,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
     setIsSubmitting(true);
     try {
+      const activeShop = authService.getActiveShop();
+      const currentShopId = activeShop?.id || 'shop_main_01';
+
       const newProduct: LocalProduct = {
         id: 'prod_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-        shopId: 'shop_main_01',
+        shopId: currentShopId,
         name: name.trim(),
         category,
         barcode: barcode.trim() || undefined,

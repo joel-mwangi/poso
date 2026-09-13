@@ -4,6 +4,7 @@ import {
   LocalCustomer,
   LocalDeniTransaction,
 } from '@/platform/database/dexie-db';
+import { authService } from '@/modules/auth/auth-service';
 import { syncService } from '@/modules/sync/sync-service';
 import { formatKes, kesToCents } from '@/shared/formatting/money';
 import {
@@ -43,16 +44,26 @@ export const DeniLedgerView: React.FC = () => {
   const [repayMethod, setRepayMethod] = useState<'cash' | 'mpesa'>('cash');
   const [repayRef, setRepayRef] = useState('');
 
+  const activeShop = authService.getActiveShop();
+
   const loadData = async () => {
-    const custs = await localDb.customers.toArray();
+    let custs: LocalCustomer[] = [];
+    let txs: LocalDeniTransaction[] = [];
+    if (activeShop?.id) {
+      custs = await localDb.customers.where('shopId').equals(activeShop.id).toArray();
+      txs = await localDb.deni_transactions.where('shopId').equals(activeShop.id).reverse().sortBy('createdAt');
+      txs = txs.slice(0, 30);
+    } else {
+      custs = await localDb.customers.toArray();
+      txs = await localDb.deni_transactions.orderBy('createdAt').reverse().limit(30).toArray();
+    }
     setCustomers(custs);
-    const txs = await localDb.deni_transactions.orderBy('createdAt').reverse().limit(30).toArray();
     setTransactions(txs);
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeShop?.id]);
 
   const openCustomerStatement = async (cust: LocalCustomer) => {
     setStatementCustomer(cust);
@@ -116,9 +127,10 @@ export const DeniLedgerView: React.FC = () => {
     if (!newName.trim() || !newPhone.trim()) return;
 
     const limit = parseFloat(newLimitKes) || 2000;
+    const currentShopId = activeShop?.id || 'shop_main_01';
     const newCustomer: LocalCustomer = {
       id: 'cust_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      shopId: 'shop_main_01',
+      shopId: currentShopId,
       name: newName.trim(),
       phone: newPhone.trim(),
       deniBalance: 0,
@@ -152,9 +164,10 @@ export const DeniLedgerView: React.FC = () => {
       updatedAt: new Date().toISOString(),
     });
 
+    const currentShopId = activeShop?.id || repayingCustomer.shopId || 'shop_main_01';
     const tx: LocalDeniTransaction = {
       id: 'deni_repay_' + Date.now(),
-      shopId: 'shop_main_01',
+      shopId: currentShopId,
       customerId: repayingCustomer.id,
       customerName: repayingCustomer.name,
       type: 'repay',
@@ -248,7 +261,29 @@ export const DeniLedgerView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredCustomers.map((cust) => (
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 px-4 text-center">
+                    <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-700">No customers registered yet</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {customers.length === 0
+                        ? 'Add customers to record credit purchases, track balances, and send repayment reminders.'
+                        : 'No customer matches your search filter.'}
+                    </p>
+                    {customers.length === 0 && (
+                      <button
+                        onClick={() => setIsAddCustomerOpen(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs hover:bg-teal-900"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Add First Customer
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                filteredCustomers.map((cust) => (
                 <tr key={cust.id} className="hover:bg-slate-50/70 transition-colors">
                   <td className="py-3 px-4 font-bold text-slate-900 text-sm">
                     {cust.name}
@@ -310,7 +345,8 @@ export const DeniLedgerView: React.FC = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+              ))
+            )}
             </tbody>
           </table>
         </div>

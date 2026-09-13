@@ -18,6 +18,8 @@ import {
   Mail,
   User,
   Phone,
+  Package,
+  PackageOpen,
 } from 'lucide-react';
 
 interface OwnerOnboardingModalProps {
@@ -56,6 +58,7 @@ export const OwnerOnboardingModal: React.FC<OwnerOnboardingModalProps> = ({
 
   // Step 4: Shop Profile & People Access
   const [operatorChoice, setOperatorChoice] = useState<'myself' | 'helper'>('myself');
+  const [catalogChoice, setCatalogChoice] = useState<'empty' | 'kenyan_essentials'>('empty');
   const [helperName, setHelperName] = useState('');
   const [helperEmail, setHelperEmail] = useState('');
   const [helperPhone, setHelperPhone] = useState('');
@@ -124,6 +127,7 @@ export const OwnerOnboardingModal: React.FC<OwnerOnboardingModalProps> = ({
       runsAlone,
       otherPeopleUseSystem: !runsAlone || operatorChoice === 'helper',
       setupChoice: 'recommended',
+      catalogChoice,
     };
 
     let helper: HelperInput | undefined;
@@ -823,6 +827,91 @@ export const OwnerOnboardingModal: React.FC<OwnerOnboardingModalProps> = ({
                 )}
               </div>
             )}
+
+            {/* Catalog & Inventory Starting State */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-slate-800 text-xs">
+                  Initial Catalog & Stock Setup
+                </label>
+                <span className="text-[10px] font-semibold text-slate-500">
+                  Choose your starting point
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCatalogChoice('empty')}
+                  className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                    catalogChoice === 'empty'
+                      ? 'border-teal-700 bg-white shadow-xs text-slate-900 ring-2 ring-teal-700/20'
+                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        catalogChoice === 'empty' ? 'bg-teal-50 text-teal-800' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <PackageOpen className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-slate-900">
+                        Start with Empty Shelves
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5 leading-tight">
+                        Clean slate. Add only your custom items, barcodes, and current inventory.
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-slate-500">Recommended for real shops</span>
+                    {catalogChoice === 'empty' && (
+                      <span className="text-teal-800 font-bold flex items-center gap-0.5">
+                        <Check className="w-3 h-3" /> Selected
+                      </span>
+                    )}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCatalogChoice('kenyan_essentials')}
+                  className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                    catalogChoice === 'kenyan_essentials'
+                      ? 'border-teal-700 bg-white shadow-xs text-slate-900 ring-2 ring-teal-700/20'
+                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        catalogChoice === 'kenyan_essentials' ? 'bg-teal-50 text-teal-800' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-slate-900">
+                        Load Starter Retail Catalog
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5 leading-tight">
+                        Pre-fills standard Kenyan staples (Jogoo Unga, Mumias Sugar, Brookside Milk, Airtime).
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-slate-500">10 essential products (0 stock)</span>
+                    {catalogChoice === 'kenyan_essentials' && (
+                      <span className="text-teal-800 font-bold flex items-center gap-0.5">
+                        <Check className="w-3 h-3" /> Selected
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </div>
+            </div>
 
             {/* Business Preferences */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">

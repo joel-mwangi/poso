@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { localDb, LocalProduct, LocalSale } from '@/platform/database/dexie-db';
+import { authService } from '@/modules/auth/auth-service';
 import { ProductCard } from '@/modules/catalog/components/product-card';
 import { CheckoutModal } from '@/modules/sales/components/checkout-modal';
 import { ReceiptModal } from '@/modules/sales/components/receipt-modal';
@@ -32,14 +33,20 @@ export const PosRegister: React.FC<PosRegisterProps> = ({ onOpenAddProduct }) =>
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState<LocalSale | null>(null);
 
+  const activeShop = authService.getActiveShop();
+
   const loadProducts = async () => {
-    const list = await localDb.products.filter((p) => !p.isArchived).toArray();
+    let query = localDb.products.filter((p) => !p.isArchived);
+    if (activeShop?.id) {
+      query = localDb.products.where('shopId').equals(activeShop.id).filter((p) => !p.isArchived);
+    }
+    const list = await query.toArray();
     setProducts(list);
   };
 
   useEffect(() => {
     loadProducts();
-  }, []);
+  }, [activeShop?.id]);
 
   const categories = ['All', ...Array.from(new Set(products.map((p) => p.category)))];
 

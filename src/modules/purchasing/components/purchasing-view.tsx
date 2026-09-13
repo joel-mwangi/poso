@@ -454,8 +454,24 @@ export const PurchasingView: React.FC = () => {
 
       {/* Tab 2: Suppliers Directory */}
       {activeTab === 'suppliers' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {suppliers.map((s) => (
+        suppliers.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-2xs">
+            <Building className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-sm font-bold text-slate-800">No suppliers added yet</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              Save your distributor and wholesaler contacts here to easily track invoices and payables.
+            </p>
+            <button
+              onClick={() => setIsNewSupplierOpen(true)}
+              className="mt-4 px-4 py-2 bg-teal-800 text-white text-xs font-bold rounded-xl hover:bg-teal-900 inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add First Supplier
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {suppliers.map((s) => (
             <div
               key={s.id}
               className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3"
@@ -501,6 +517,7 @@ export const PurchasingView: React.FC = () => {
             </div>
           ))}
         </div>
+        )
       )}
 
       {/* Modal 1: Record New Stock Delivery / Purchase */}

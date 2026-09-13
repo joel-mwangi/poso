@@ -25,6 +25,7 @@ export interface OwnerChecklistAnswers {
   runsAlone: boolean;
   otherPeopleUseSystem: boolean;
   setupChoice: 'simple' | 'recommended';
+  catalogChoice?: 'empty' | 'kenyan_essentials';
 }
 
 export interface NewShopInput {

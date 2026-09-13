@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { seedInitialLocalDataIfEmpty } from '@/platform/database/dexie-db';
 import { syncService, SyncStats } from '@/modules/sync/sync-service';
 import { authService } from '@/modules/auth/auth-service';
 import { AuthUser } from '@/modules/auth/auth-types';
@@ -73,9 +72,6 @@ export const App: React.FC = () => {
   });
 
   useEffect(() => {
-    // Seed initial local catalog, customers and suppliers if empty
-    seedInitialLocalDataIfEmpty();
-
     // Subscribe to auth changes
     const unsubAuth = authService.subscribe(() => {
       const user = authService.getCurrentUser();

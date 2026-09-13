@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { localDb, LocalSale, LocalProduct } from '@/platform/database/dexie-db';
+import { authService } from '@/modules/auth/auth-service';
 import { formatKes, formatKesCompact } from '@/shared/formatting/money';
 import {
   TrendingUp,
@@ -20,12 +21,22 @@ export const ReportsView: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'today' | 'week' | 'all'>('today');
   const [loading, setLoading] = useState(true);
 
+  const activeShop = authService.getActiveShop();
+
   const loadData = async () => {
     setLoading(true);
     try {
+      let salesPromise = localDb.sales.toArray();
+      let productsPromise = localDb.products.toArray();
+
+      if (activeShop?.id) {
+        salesPromise = localDb.sales.where('shopId').equals(activeShop.id).toArray();
+        productsPromise = localDb.products.where('shopId').equals(activeShop.id).toArray();
+      }
+
       const [allSales, allProducts] = await Promise.all([
-        localDb.sales.toArray(),
-        localDb.products.toArray(),
+        salesPromise,
+        productsPromise,
       ]);
       setSales(allSales);
       setProducts(allProducts);
@@ -36,7 +47,7 @@ export const ReportsView: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeShop?.id]);
 
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];

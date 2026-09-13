@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { localDb, LocalProduct } from '@/platform/database/dexie-db';
+import { authService } from '@/modules/auth/auth-service';
 import { syncService } from '@/modules/sync/sync-service';
 import { formatKes } from '@/shared/formatting/money';
 import { EditProductModal } from '@/modules/catalog/components/edit-product-modal';
@@ -31,14 +32,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenAddProduct }
   const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract'>('add');
   const [adjustmentReason, setAdjustmentReason] = useState('Received supplier delivery');
 
+  const activeShop = authService.getActiveShop();
+
   const loadData = async () => {
-    const list = await localDb.products.filter((p) => !p.isArchived).toArray();
+    let query = localDb.products.filter((p) => !p.isArchived);
+    if (activeShop?.id) {
+      query = localDb.products.where('shopId').equals(activeShop.id).filter((p) => !p.isArchived);
+    }
+    const list = await query.toArray();
     setProducts(list);
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeShop?.id]);
 
   const categories = ['All', ...Array.from(new Set(products.map((p) => p.category)))];
 
@@ -216,7 +223,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenAddProduct }
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((prod) => {
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 px-4 text-center">
+                    <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-700">No items found</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {products.length === 0
+                        ? 'Your shelves are empty. Tap "Add New Item" or import stock to get started.'
+                        : 'No products match your current search or category filter.'}
+                    </p>
+                    {products.length === 0 && (
+                      <button
+                        onClick={onOpenAddProduct}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs hover:bg-teal-900"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add First Product
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((prod) => {
                 const isOut = prod.currentStock <= 0;
                 const isLow = !isOut && prod.currentStock <= prod.minStockAlert;
 
@@ -290,7 +319,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenAddProduct }
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>

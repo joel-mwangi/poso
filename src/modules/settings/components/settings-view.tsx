@@ -83,6 +83,8 @@ export const SettingsView: React.FC = () => {
       },
     });
 
+    await authService.reloadShops();
+
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };

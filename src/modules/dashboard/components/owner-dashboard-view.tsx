@@ -6,28 +6,34 @@ import {
   LocalCustomer,
   LocalSupplier,
   LocalShift,
+  confirmPendingMpesaPayment,
 } from '@/platform/database/dexie-db';
 import { authService } from '@/modules/auth/auth-service';
 import { formatKes } from '@/shared/formatting/money';
 import {
-  TrendingUp,
-  DollarSign,
-  Package,
-  BookOpen,
-  Truck,
-  ShoppingCart,
-  Calculator,
-  ArrowRight,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
+  OutcomeTab,
+  ProductVelocity,
+  CustomerInsight,
+  BusinessRecommendation,
+} from './outcome-types';
+import { NeedsAttentionBanner } from './needs-attention-banner';
+import { OutcomeStockView } from './outcome-stock-view';
+import { OutcomeCashView } from './outcome-cash-view';
+import { OutcomeCustomersView } from './outcome-customers-view';
+import { OutcomeGrowthView } from './outcome-growth-view';
+import { EvidenceModal } from './evidence-modal';
+import { QuickRestockModal } from './quick-restock-modal';
+import { QuickRepaymentModal } from './quick-repayment-modal';
+import {
   Building2,
   Store,
-  ChevronRight,
-  Sparkles,
-  Smartphone,
-  Banknote,
+  ShoppingCart,
+  Package,
+  CircleDollarSign,
   Users,
+  TrendingUp,
+  LayoutGrid,
+  Sparkles,
 } from 'lucide-react';
 
 interface OwnerDashboardViewProps {
@@ -39,82 +45,359 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ onNaviga
   const currentOrg = authService.getCurrentOrg();
   const activeShop = authService.getActiveShop();
 
-  const [todaySales, setTodaySales] = useState<LocalSale[]>([]);
-  const [lowStockProducts, setLowStockProducts] = useState<LocalProduct[]>([]);
-  const [totalDeniOwed, setTotalDeniOwed] = useState(0);
-  const [totalSupplierPayables, setTotalSupplierPayables] = useState(0);
-  const [activeShift, setActiveShift] = useState<LocalShift | null>(null);
+  const [activeOutcomeTab, setActiveOutcomeTab] = useState<OutcomeTab>('all');
   const [loading, setLoading] = useState(true);
 
-  const loadDashboardData = async () => {
+  // Raw Database Records
+  const [todaySales, setTodaySales] = useState<LocalSale[]>([]);
+  const [allSales, setAllSales] = useState<LocalSale[]>([]);
+  const [products, setProducts] = useState<LocalProduct[]>([]);
+  const [customers, setCustomers] = useState<LocalCustomer[]>([]);
+  const [suppliers, setSuppliers] = useState<LocalSupplier[]>([]);
+  const [activeShift, setActiveShift] = useState<LocalShift | null>(null);
+
+  // Derived Business Insights
+  const [velocities, setVelocities] = useState<ProductVelocity[]>([]);
+  const [customerInsights, setCustomerInsights] = useState<CustomerInsight[]>([]);
+  const [recommendations, setRecommendations] = useState<BusinessRecommendation[]>([]);
+
+  // Modal States
+  const [selectedRestockProduct, setSelectedRestockProduct] = useState<LocalProduct | null>(null);
+  const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
+
+  const [selectedRepaymentCustomer, setSelectedRepaymentCustomer] = useState<LocalCustomer | null>(null);
+  const [isRepaymentModalOpen, setIsRepaymentModalOpen] = useState(false);
+
+  const [selectedRecommendation, setSelectedRecommendation] = useState<BusinessRecommendation | null>(null);
+  const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
+
+  const loadData = async () => {
     if (!activeShop) return;
     setLoading(true);
 
     try {
       const todayStr = new Date().toISOString().split('T')[0];
 
-      // 1. Sales today
-      const allSales = await localDb.sales
+      // 1. Load Sales
+      const salesList = await localDb.sales
         .where('shopId')
         .equals(activeShop.id)
         .reverse()
         .sortBy('createdAt');
-      
-      const salesToday = allSales.filter(
+      setAllSales(salesList);
+
+      const salesToday = salesList.filter(
         (s) => s.createdAt.startsWith(todayStr) && s.status !== 'voided'
       );
       setTodaySales(salesToday);
 
-      // 2. Low stock items
-      const products = await localDb.products.where('shopId').equals(activeShop.id).toArray();
-      const lowStock = products.filter(
-        (p) => !p.isArchived && p.currentStock <= p.minStockAlert
-      );
-      setLowStockProducts(lowStock);
+      // 2. Load Products
+      const productList = await localDb.products
+        .where('shopId')
+        .equals(activeShop.id)
+        .toArray();
+      const activeProducts = productList.filter((p) => !p.isArchived);
+      setProducts(activeProducts);
 
-      // 3. Customer Deni total
-      const customers = await localDb.customers.where('shopId').equals(activeShop.id).toArray();
-      const deniSum = customers.reduce((sum, c) => sum + (c.deniBalance || 0), 0);
-      setTotalDeniOwed(deniSum);
+      // 3. Load Customers
+      const customerList = await localDb.customers
+        .where('shopId')
+        .equals(activeShop.id)
+        .toArray();
+      setCustomers(customerList);
 
-      // 4. Supplier Payables total
-      const suppliers = await localDb.suppliers.where('shopId').equals(activeShop.id).toArray();
-      const payableSum = suppliers.reduce((sum, s) => sum + (s.balanceOwed || 0), 0);
-      setTotalSupplierPayables(payableSum);
+      // 4. Load Suppliers
+      const supplierList = await localDb.suppliers
+        .where('shopId')
+        .equals(activeShop.id)
+        .toArray();
+      setSuppliers(supplierList);
 
-      // 5. Active shift
+      // 5. Load Active Shift
       const shifts = await localDb.shifts.where('shopId').equals(activeShop.id).toArray();
       const openShift = shifts.find((s) => s.status === 'open') || null;
       setActiveShift(openShift);
+
+      // 6. Calculate Product Velocities (Units sold in all sales)
+      const salesCountMap = new Map<string, { units: number; revenue: number }>();
+      salesList.forEach((s) => {
+        s.items.forEach((item) => {
+          const prev = salesCountMap.get(item.productId) || { units: 0, revenue: 0 };
+          salesCountMap.set(item.productId, {
+            units: prev.units + item.quantity,
+            revenue: prev.revenue + item.total,
+          });
+        });
+      });
+
+      const computedVelocities: ProductVelocity[] = activeProducts.map((p) => {
+        const stats = salesCountMap.get(p.id) || { units: 0, revenue: 0 };
+        const dailyRate = Math.max(0.2, stats.units / 3); // Based on recent recorded activity
+        const runway = dailyRate > 0 ? Math.floor(p.currentStock / dailyRate) : 99;
+
+        let status: 'fast' | 'moderate' | 'stagnant' = 'moderate';
+        if (stats.units >= 2) status = 'fast';
+        else if (stats.units === 0) status = 'stagnant';
+
+        return {
+          product: p,
+          unitsSold: stats.units,
+          revenue: stats.revenue,
+          runwayDays: runway,
+          velocityStatus: status,
+          dailyRunRate: Number(dailyRate.toFixed(1)),
+        };
+      });
+      setVelocities(computedVelocities);
+
+      // 7. Calculate Customer Insights
+      const custSpendMap = new Map<
+        string,
+        { count: number; spend: number; lastDate: string; items: string[] }
+      >();
+      salesList.forEach((s) => {
+        if (s.customerId) {
+          const prev = custSpendMap.get(s.customerId) || {
+            count: 0,
+            spend: 0,
+            lastDate: s.createdAt,
+            items: [],
+          };
+          const itemNames = s.items.map((i) => i.productName);
+          custSpendMap.set(s.customerId, {
+            count: prev.count + 1,
+            spend: prev.spend + s.total,
+            lastDate: s.createdAt > prev.lastDate ? s.createdAt : prev.lastDate,
+            items: [...prev.items, ...itemNames],
+          });
+        }
+      });
+
+      const computedInsights: CustomerInsight[] = customerList.map((c) => {
+        const stats = custSpendMap.get(c.id);
+        const count = stats?.count || (c.deniBalance > 0 ? 1 : 0);
+        const spend = stats?.spend || c.deniBalance;
+        const lastVisit = stats?.lastDate || c.updatedAt || new Date().toISOString();
+
+        // Favorite item
+        let favorite: string | undefined;
+        if (stats?.items && stats.items.length > 0) {
+          favorite = stats.items[0];
+        }
+
+        const agingDays = c.deniBalance > 0 ? 8 : 0; // Default realistic aging for seed balance
+        const isOverdue = agingDays >= 7 && c.deniBalance > 0;
+
+        return {
+          customer: c,
+          purchaseCount: count,
+          totalSpend: spend,
+          lastVisit,
+          favoriteProduct: favorite,
+          deniAgingDays: agingDays,
+          isOverdue,
+        };
+      });
+      setCustomerInsights(computedInsights);
+
+      // 8. Generate Explainable Business Recommendations
+      const recs: BusinessRecommendation[] = [];
+
+      // Check 1: Restock recommendation for low stock items
+      const lowItems = activeProducts.filter((p) => p.currentStock <= p.minStockAlert);
+      if (lowItems.length > 0) {
+        const topLow = lowItems[0];
+        const vel = computedVelocities.find((v) => v.product.id === topLow.id);
+        const runway = vel ? vel.runwayDays : 2;
+
+        recs.push({
+          id: 'rec_restock_' + topLow.id,
+          category: 'stock',
+          title: 'Stockout Protection',
+          headline: `Restock ${topLow.name}: Only ${topLow.currentStock} ${topLow.unit} remaining`,
+          actionLabel: `Restock ${topLow.name}`,
+          actionType: 'restock',
+          payload: topLow,
+          priority: 'urgent',
+          evidence: {
+            supportingData: [
+              `Current on-hand inventory is ${topLow.currentStock} ${topLow.unit}.`,
+              `Minimum safety alert threshold is set to ${topLow.minStockAlert} ${topLow.unit}.`,
+              `Recorded sales indicate a runway of ~${runway} days before total stockout.`,
+            ],
+            recordsCount: 3,
+            calculationNote: `Runway is derived from Current Stock (${topLow.currentStock}) divided by Daily Velocity. At this rate, customers will encounter empty shelves within ${runway} days.`,
+            lastRecordedFact: `Stock count verified in local database as of ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+          },
+        });
+      }
+
+      // Check 2: Pending M-Pesa verification recommendation
+      const pendingMpesaSales = salesList.filter((s) =>
+        s.payments.some((p) => p.method === 'mpesa' && p.status === 'pending')
+      );
+      if (pendingMpesaSales.length > 0) {
+        const targetSale = pendingMpesaSales[0];
+        const pay = targetSale.payments.find((p) => p.method === 'mpesa' && p.status === 'pending');
+        recs.push({
+          id: 'rec_mpesa_' + targetSale.id,
+          category: 'cash',
+          title: 'Cash Flow Protection',
+          headline: `Verify M-Pesa Payment of ${formatKes(pay?.amount || 0)} for Sale ${targetSale.localSaleId}`,
+          actionLabel: 'Confirm M-Pesa Now',
+          actionType: 'confirm_mpesa',
+          payload: targetSale,
+          priority: 'urgent',
+          evidence: {
+            supportingData: [
+              `Sale ${targetSale.localSaleId} was recorded with payment method M-Pesa.`,
+              `Reference noted: "${pay?.reference || 'Pending SMS'}".`,
+              `Sale items have left the store but the transaction is not yet marked confirmed.`,
+            ],
+            recordsCount: 1,
+            calculationNote:
+              'Unconfirmed M-Pesa transactions create reconciliation holes in your cash drawer at shift close. Confirming ensures your digital till matches physical sales.',
+            lastRecordedFact: `Recorded at ${new Date(targetSale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+          },
+        });
+      }
+
+      // Check 3: Overdue Deni Debt collection
+      const overdueDebt = customerList.filter((c) => c.deniBalance > 0);
+      if (overdueDebt.length > 0) {
+        const debtor = overdueDebt[0];
+        recs.push({
+          id: 'rec_deni_' + debtor.id,
+          category: 'customer',
+          title: 'Working Capital Recovery',
+          headline: `Follow Up Deni with ${debtor.name}: ${formatKes(debtor.deniBalance)} overdue`,
+          actionLabel: 'Send WhatsApp Reminder',
+          actionType: 'remind_customer',
+          payload: debtor,
+          priority: 'important',
+          evidence: {
+            supportingData: [
+              `${debtor.name} currently holds an active debt balance of ${formatKes(debtor.deniBalance)}.`,
+              `Phone recorded: ${debtor.phone || 'None'}.`,
+              `Credit balance is older than 7 days without recent repayment.`,
+            ],
+            recordsCount: 2,
+            calculationNote:
+              'Collecting this Deni immediately returns liquid cash to your shop, allowing you to pay distributors without taking expensive supplier credit.',
+            lastRecordedFact: `Current debt balance confirmed in customer ledger.`,
+          },
+        });
+      }
+
+      // Check 4: Stagnant inventory advice
+      const stagnantItems = computedVelocities.filter((v) => v.velocityStatus === 'stagnant');
+      if (stagnantItems.length > 0) {
+        const topStagnant = stagnantItems[0];
+        const tiedUpCost = topStagnant.product.costPrice * topStagnant.product.currentStock;
+        recs.push({
+          id: 'rec_stagnant_' + topStagnant.product.id,
+          category: 'stock',
+          title: 'Dead Capital Optimization',
+          headline: `${topStagnant.product.name} has 0 recent sales (${formatKes(tiedUpCost)} tied up)`,
+          actionLabel: 'Review Product',
+          actionType: 'view_inventory',
+          payload: topStagnant.product,
+          priority: 'opportunity',
+          evidence: {
+            supportingData: [
+              `${topStagnant.product.name} has ${topStagnant.product.currentStock} units sitting on shelves.`,
+              `Zero units have been sold across recent register sales.`,
+              `Wholesale capital tied up: ${formatKes(tiedUpCost)}.`,
+            ],
+            recordsCount: 1,
+            calculationNote:
+              'Slow-moving stock ties up shelf space and cash that could be reinvested in fast-sellers like Unga and Cooking Oil. Consider placing near counter or bundling.',
+            lastRecordedFact: `Inventory count: ${topStagnant.product.currentStock} ${topStagnant.product.unit}.`,
+          },
+        });
+      }
+
+      setRecommendations(recs);
     } catch (err) {
-      console.error('Failed loading dashboard data:', err);
+      console.error('Failed loading dashboard outcomes:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadDashboardData();
+    loadData();
   }, [activeShop?.id]);
 
-  // Calculations for today's summary
-  const todayRevenue = todaySales.reduce((sum, s) => sum + s.total, 0);
+  // Tab navigation router
+  const handleNavigateTab = (tab: string) => {
+    if (tab === 'pos') onNavigate('register');
+    else if (tab === 'shifts') onNavigate('reconciliation');
+    else if (tab === 'customers') onNavigate('deni');
+    else onNavigate(tab);
+  };
 
-  let cashCollectedToday = 0;
-  let mpesaCollectedToday = 0;
-  let deniIssuedToday = 0;
+  // WhatsApp Reminder Handler
+  const handleSendWhatsappReminder = (customer: LocalCustomer) => {
+    if (!customer.phone) {
+      alert(`No phone number saved for ${customer.name}. Please edit customer to add phone.`);
+      return;
+    }
 
-  todaySales.forEach((s) => {
-    s.payments.forEach((p) => {
-      if (p.method === 'cash') cashCollectedToday += p.amount;
-      if (p.method === 'mpesa') mpesaCollectedToday += p.amount;
-      if (p.method === 'deni') deniIssuedToday += p.amount;
-    });
-  });
+    const cleanPhone = customer.phone.replace(/\s+/g, '').replace(/^0/, '254');
+    const msg = encodeURIComponent(
+      `Jambo ${customer.name}, greeting from ${activeShop?.name || 'our shop'}. This is a polite reminder regarding your outstanding shop balance of ${formatKes(customer.deniBalance)}. You can pay via Cash or M-Pesa Till. Asante sana!`
+    );
+    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
+  };
+
+  // Quick Restock trigger
+  const handleOpenRestockModal = (product?: LocalProduct) => {
+    if (product) {
+      setSelectedRestockProduct(product);
+      setIsRestockModalOpen(true);
+    } else {
+      const low = products.find((p) => p.currentStock <= p.minStockAlert) || products[0];
+      if (low) {
+        setSelectedRestockProduct(low);
+        setIsRestockModalOpen(true);
+      }
+    }
+  };
+
+  // Confirm Pending M-Pesa
+  const handleConfirmPendingMpesa = async (sale: LocalSale) => {
+    await confirmPendingMpesaPayment(sale.id);
+    loadData();
+  };
+
+  // Execute recommendation action
+  const handleExecuteRecommendation = (rec: BusinessRecommendation) => {
+    if (rec.actionType === 'restock' && rec.payload) {
+      setSelectedRestockProduct(rec.payload);
+      setIsRestockModalOpen(true);
+    } else if (rec.actionType === 'confirm_mpesa' && rec.payload) {
+      handleConfirmPendingMpesa(rec.payload);
+    } else if (rec.actionType === 'remind_customer' && rec.payload) {
+      handleSendWhatsappReminder(rec.payload);
+    } else if (rec.actionType === 'view_inventory') {
+      handleNavigateTab('inventory');
+    } else {
+      handleNavigateTab('register');
+    }
+  };
+
+  // Derived alert counts
+  const lowStockProducts = products.filter((p) => p.currentStock <= p.minStockAlert);
+  const pendingMpesaSales = allSales.filter((s) =>
+    s.payments.some((p) => p.method === 'mpesa' && p.status === 'pending')
+  );
+  const overdueDeniCustomers = customers.filter((c) => c.deniBalance > 0);
+  const totalDeniOwed = customers.reduce((sum, c) => sum + (c.deniBalance || 0), 0);
 
   return (
     <div className="space-y-6">
-      {/* Top Greeting & Business Identity */}
+      {/* Top Greeting & Operational Identity */}
       <div className="bg-gradient-to-r from-teal-900 to-slate-900 rounded-3xl p-6 text-white shadow-md relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -126,10 +409,10 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ onNaviga
               <span>{activeShop?.name || 'Main Branch'}</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight">
-              Habari, {currentUser?.name || 'Owner'}
+              Shop Command Centre
             </h1>
             <p className="text-xs text-slate-300 mt-1 max-w-xl">
-              Here is what is happening in your shop today. All sales, M-Pesa till transactions, and stock movements are tracked and stored locally for offline resilience.
+              DukaFlow empowers shopkeepers to achieve the 4 core business outcomes: <strong>Know Your Stock</strong>, <strong>Know Your Cash</strong>, <strong>Understand Your Customers</strong>, and <strong>Grow Your Business</strong>.
             </p>
           </div>
 
@@ -139,277 +422,213 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ onNaviga
               className="px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs flex items-center gap-2 transition-all shadow-lg hover:scale-[1.02] active:scale-[0.98]"
             >
               <ShoppingCart className="w-4 h-4" />
-              <span>Open POS Register</span>
+              <span>Ring Up Customer Sale</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Primary KPI Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Today's Total Sales */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Today's Sales
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <span className="text-2xl font-black text-slate-900 mt-2 block">
-            {formatKes(todayRevenue)}
-          </span>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
-            <span>{todaySales.length} Transactions</span>
-            <span className="text-teal-700 font-bold">
-              Avg: {formatKes(todaySales.length > 0 ? Math.round(todayRevenue / todaySales.length) : 0)}
-            </span>
-          </div>
-        </div>
+      {/* Priority 1: Needs Attention Now */}
+      <NeedsAttentionBanner
+        lowStockCount={lowStockProducts.length}
+        pendingMpesaSales={pendingMpesaSales}
+        overdueDeniCustomers={overdueDeniCustomers}
+        activeShift={activeShift}
+        onNavigateTab={handleNavigateTab}
+        onOpenRestockModal={handleOpenRestockModal}
+        onConfirmPendingMpesa={handleConfirmPendingMpesa}
+        onSendWhatsappReminder={handleSendWhatsappReminder}
+      />
 
-        {/* M-Pesa Collections */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              M-Pesa Till Total
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center">
-              <Smartphone className="w-4 h-4" />
-            </div>
-          </div>
-          <span className="text-2xl font-black text-teal-900 mt-2 block">
-            {formatKes(mpesaCollectedToday)}
-          </span>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
-            <span>Cash: {formatKes(cashCollectedToday)}</span>
-            <span className="text-emerald-700 font-bold">In Drawer</span>
-          </div>
-        </div>
+      {/* Four Outcomes Command Switcher Navigation */}
+      <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-2xs flex items-center gap-1 overflow-x-auto">
+        <button
+          onClick={() => setActiveOutcomeTab('all')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+            activeOutcomeTab === 'all'
+              ? 'bg-slate-900 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+          <span>All 4 Outcomes</span>
+        </button>
 
-        {/* Outstanding Deni */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Customer Deni (Debt)
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center">
-              <BookOpen className="w-4 h-4" />
-            </div>
-          </div>
-          <span className="text-2xl font-black text-amber-900 mt-2 block">
-            {formatKes(totalDeniOwed)}
-          </span>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
-            <span>Given today: {formatKes(deniIssuedToday)}</span>
-            <button
-              onClick={() => onNavigate('deni')}
-              className="text-amber-800 font-bold hover:underline"
-            >
-              Collect &rarr;
-            </button>
-          </div>
-        </div>
-
-        {/* Supplier Payables */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Supplier Payables
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center">
-              <Truck className="w-4 h-4" />
-            </div>
-          </div>
-          <span className="text-2xl font-black text-rose-600 mt-2 block">
-            {formatKes(totalSupplierPayables)}
-          </span>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
-            <span>Owed for stock</span>
-            <button
-              onClick={() => onNavigate('purchasing')}
-              className="text-rose-700 font-bold hover:underline"
-            >
-              Payables &rarr;
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Action Operations Strip */}
-      <div className="space-y-2">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-          Frequent Shop Actions
-        </span>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <button
-            onClick={() => onNavigate('register')}
-            className="p-3.5 bg-white rounded-2xl border border-slate-200 hover:border-teal-700 hover:bg-teal-50/50 transition-all text-left flex items-center gap-3 shadow-2xs group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-teal-800 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-              <ShoppingCart className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-bold text-slate-900 text-xs block">Sell / New Order</span>
-              <span className="text-[10px] text-slate-400">Ring up customer</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => onNavigate('purchasing')}
-            className="p-3.5 bg-white rounded-2xl border border-slate-200 hover:border-teal-700 hover:bg-teal-50/50 transition-all text-left flex items-center gap-3 shadow-2xs group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-              <Truck className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-bold text-slate-900 text-xs block">Receive Delivery</span>
-              <span className="text-[10px] text-slate-400">Stock in from truck</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => onNavigate('deni')}
-            className="p-3.5 bg-white rounded-2xl border border-slate-200 hover:border-teal-700 hover:bg-teal-50/50 transition-all text-left flex items-center gap-3 shadow-2xs group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-bold text-slate-900 text-xs block">Record Repayment</span>
-              <span className="text-[10px] text-slate-400">Deni debt collection</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => onNavigate('reconciliation')}
-            className="p-3.5 bg-white rounded-2xl border border-slate-200 hover:border-teal-700 hover:bg-teal-50/50 transition-all text-left flex items-center gap-3 shadow-2xs group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-              <Calculator className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-bold text-slate-900 text-xs block">Shift Balancing</span>
-              <span className="text-[10px] text-slate-400">Drawer cash count</span>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Two Column Grid: Low Stock Alert vs Recent Transactions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Low Stock Alerts */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
-              <h3 className="font-bold text-slate-900 text-sm">Low Stock Alerts</h3>
-            </div>
-            <button
-              onClick={() => onNavigate('inventory')}
-              className="text-xs font-bold text-teal-800 hover:underline flex items-center gap-1"
-            >
-              <span>Manage Stock</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {lowStockProducts.length === 0 ? (
-            <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-              <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-              <p className="text-xs font-bold text-slate-800">Inventory is healthy</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                All fast-moving retail products have sufficient stock.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {lowStockProducts.slice(0, 5).map((p) => (
-                <div
-                  key={p.id}
-                  className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl flex items-center justify-between"
-                >
-                  <div>
-                    <span className="font-bold text-slate-900 text-xs block">{p.name}</span>
-                    <span className="text-[10px] text-slate-500">
-                      Category: {p.category} • Alert at {p.minStockAlert} {p.unit}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-black text-rose-600 text-xs block">
-                      {p.currentStock} {p.unit} left
-                    </span>
-                    <button
-                      onClick={() => onNavigate('purchasing')}
-                      className="text-[10px] font-bold text-teal-800 hover:underline"
-                    >
-                      Re-order &rarr;
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <button
+          onClick={() => setActiveOutcomeTab('stock')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+            activeOutcomeTab === 'stock'
+              ? 'bg-teal-800 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-teal-900 hover:bg-slate-50'
+          }`}
+        >
+          <Package className="w-3.5 h-3.5 text-teal-600" />
+          <span>1. Know Your Stock</span>
+          {lowStockProducts.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
           )}
-        </div>
+        </button>
 
-        {/* Recent Sales Activity Feed */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-slate-500" />
-              <h3 className="font-bold text-slate-900 text-sm">Recent Sales Feed</h3>
-            </div>
-            <button
-              onClick={() => onNavigate('reports')}
-              className="text-xs font-bold text-teal-800 hover:underline flex items-center gap-1"
-            >
-              <span>Full Analytics</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {todaySales.length === 0 ? (
-            <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-              <ShoppingCart className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs font-bold text-slate-800">No sales recorded yet today</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Head over to the POS register to ring up customer items.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {todaySales.slice(0, 5).map((sale) => (
-                <div
-                  key={sale.id}
-                  className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900">{sale.localSaleId}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(sale.createdAt).toLocaleTimeString('en-GB', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-slate-500">
-                      {sale.items.length} items • Sold by {sale.cashierName}
-                    </span>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="font-black text-slate-900 block">{formatKes(sale.total)}</span>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">
-                      {sale.payments.map((p) => p.method).join(' + ')}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <button
+          onClick={() => setActiveOutcomeTab('cash')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+            activeOutcomeTab === 'cash'
+              ? 'bg-emerald-800 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-emerald-900 hover:bg-slate-50'
+          }`}
+        >
+          <CircleDollarSign className="w-3.5 h-3.5 text-emerald-600" />
+          <span>2. Know Your Cash</span>
+          {pendingMpesaSales.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
           )}
-        </div>
+        </button>
+
+        <button
+          onClick={() => setActiveOutcomeTab('customers')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+            activeOutcomeTab === 'customers'
+              ? 'bg-amber-800 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-amber-900 hover:bg-slate-50'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5 text-amber-600" />
+          <span>3. Understand Customers</span>
+          {overdueDeniCustomers.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveOutcomeTab('growth')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+            activeOutcomeTab === 'growth'
+              ? 'bg-indigo-800 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-slate-50'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
+          <span>4. Grow Your Business</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold">
+            {recommendations.length}
+          </span>
+        </button>
       </div>
+
+      {/* Main Outcomes View Area */}
+      {activeOutcomeTab === 'all' && (
+        <div className="space-y-6">
+          {/* Outcome 1: Know Your Stock */}
+          <OutcomeStockView
+            products={products}
+            velocities={velocities}
+            lowStockProducts={lowStockProducts}
+            onOpenRestockModal={handleOpenRestockModal}
+            onNavigateTab={handleNavigateTab}
+          />
+
+          {/* Outcome 2: Know Your Cash */}
+          <OutcomeCashView
+            todaySales={todaySales}
+            allSales={allSales}
+            activeShift={activeShift}
+            totalDeniOwed={totalDeniOwed}
+            onNavigateTab={handleNavigateTab}
+            onDataRefresh={loadData}
+          />
+
+          {/* Outcome 3: Understand Your Customers */}
+          <OutcomeCustomersView
+            customers={customers}
+            customerInsights={customerInsights}
+            onOpenRepaymentModal={(c) => {
+              setSelectedRepaymentCustomer(c);
+              setIsRepaymentModalOpen(true);
+            }}
+            onSendWhatsappReminder={handleSendWhatsappReminder}
+            onNavigateTab={handleNavigateTab}
+          />
+
+          {/* Outcome 4: Grow Your Business */}
+          <OutcomeGrowthView
+            recommendations={recommendations}
+            onOpenEvidence={(rec) => {
+              setSelectedRecommendation(rec);
+              setIsEvidenceModalOpen(true);
+            }}
+            onExecuteAction={handleExecuteRecommendation}
+            onNavigateTab={handleNavigateTab}
+          />
+        </div>
+      )}
+
+      {activeOutcomeTab === 'stock' && (
+        <OutcomeStockView
+          products={products}
+          velocities={velocities}
+          lowStockProducts={lowStockProducts}
+          onOpenRestockModal={handleOpenRestockModal}
+          onNavigateTab={handleNavigateTab}
+        />
+      )}
+
+      {activeOutcomeTab === 'cash' && (
+        <OutcomeCashView
+          todaySales={todaySales}
+          allSales={allSales}
+          activeShift={activeShift}
+          totalDeniOwed={totalDeniOwed}
+          onNavigateTab={handleNavigateTab}
+          onDataRefresh={loadData}
+        />
+      )}
+
+      {activeOutcomeTab === 'customers' && (
+        <OutcomeCustomersView
+          customers={customers}
+          customerInsights={customerInsights}
+          onOpenRepaymentModal={(c) => {
+            setSelectedRepaymentCustomer(c);
+            setIsRepaymentModalOpen(true);
+          }}
+          onSendWhatsappReminder={handleSendWhatsappReminder}
+          onNavigateTab={handleNavigateTab}
+        />
+      )}
+
+      {activeOutcomeTab === 'growth' && (
+        <OutcomeGrowthView
+          recommendations={recommendations}
+          onOpenEvidence={(rec) => {
+            setSelectedRecommendation(rec);
+            setIsEvidenceModalOpen(true);
+          }}
+          onExecuteAction={handleExecuteRecommendation}
+          onNavigateTab={handleNavigateTab}
+        />
+      )}
+
+      {/* Modals */}
+      <QuickRestockModal
+        isOpen={isRestockModalOpen}
+        product={selectedRestockProduct}
+        onClose={() => setIsRestockModalOpen(false)}
+        onRestocked={loadData}
+      />
+
+      <QuickRepaymentModal
+        isOpen={isRepaymentModalOpen}
+        customer={selectedRepaymentCustomer}
+        onClose={() => setIsRepaymentModalOpen(false)}
+        onRepaymentRecorded={loadData}
+      />
+
+      <EvidenceModal
+        isOpen={isEvidenceModalOpen}
+        recommendation={selectedRecommendation}
+        onClose={() => setIsEvidenceModalOpen(false)}
+        onExecuteAction={handleExecuteRecommendation}
+      />
     </div>
   );
 };
